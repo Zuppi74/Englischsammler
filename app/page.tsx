@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 type WordStatus = "new" | "learning" | "learned";
 type WordCard = {
@@ -67,6 +67,8 @@ export default function Home() {
   const [category, setCategory] = useState("Alltag");
   const [learnIndex, setLearnIndex] = useState(0);
   const [revealed, setRevealed] = useState(false);
+  const [notice, setNotice] = useState("");
+  const importInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const saved = window.localStorage.getItem("wortschatz-words");
@@ -147,6 +149,79 @@ export default function Home() {
     setLearnIndex((index) => index + 1);
   }
 
+  function showNotice(message: string) {
+    setNotice(message);
+    window.setTimeout(() => setNotice(""), 3500);
+  }
+
+  async function exportWords() {
+    const date = new Date().toISOString().slice(0, 10);
+    const fileName = `wortschatz-${date}.json`;
+    const contents = JSON.stringify({
+      format: "wortschatz-export",
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      words,
+    }, null, 2);
+    const file = new File([contents], fileName, { type: "application/json" });
+
+    try {
+      if (navigator.share && navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ title: "Meine Wortschatz-Sammlung", files: [file] });
+        showNotice("Sammlung wurde zum Teilen bereitgestellt.");
+        return;
+      }
+      const url = URL.createObjectURL(file);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = fileName;
+      link.click();
+      URL.revokeObjectURL(url);
+      showNotice("Exportdatei wurde gespeichert.");
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      showNotice("Der Export konnte nicht gestartet werden.");
+    }
+  }
+
+  async function importWords(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    try {
+      const parsed = JSON.parse(await file.text()) as { words?: unknown } | unknown[];
+      const imported = Array.isArray(parsed) ? parsed : parsed.words;
+      if (!Array.isArray(imported) || !imported.every((word) =>
+        word && typeof word === "object" &&
+        typeof (word as WordCard).english === "string" &&
+        typeof (word as WordCard).german === "string"
+      )) throw new Error("Ungültiges Dateiformat");
+
+      if (words.length && !window.confirm(`Die aktuelle Sammlung wird durch ${imported.length} importierte Karten ersetzt. Fortfahren?`)) return;
+
+      const normalized: WordCard[] = imported.map((entry) => {
+        const word = entry as Partial<WordCard>;
+        return {
+          id: typeof word.id === "string" ? word.id : crypto.randomUUID(),
+          english: word.english?.trim() || "",
+          german: word.german?.trim() || "",
+          example: typeof word.example === "string" ? word.example : "",
+          category: typeof word.category === "string" ? word.category : "Sonstiges",
+          status: word.status === "learning" || word.status === "learned" ? word.status : "new",
+          favorite: word.favorite === true,
+          createdAt: typeof word.createdAt === "number" ? word.createdAt : Date.now(),
+        };
+      });
+      setWords(normalized);
+      setFilter("all");
+      setQuery("");
+      showNotice(`${normalized.length} Karten wurden erfolgreich geladen.`);
+    } catch {
+      showNotice("Diese Datei ist keine gültige Wortschatz-Sammlung.");
+    }
+  }
+
   return (
     <main className="app-shell">
       <header className="topbar">
@@ -158,8 +233,15 @@ export default function Home() {
           <button className={view === "collection" ? "active" : ""} onClick={() => setView("collection")}>Sammlung</button>
           <button className={view === "learn" ? "active" : ""} onClick={() => { setView("learn"); setRevealed(false); }}>Lernen</button>
         </nav>
-        <button className="primary compact" onClick={openNewForm}><span>＋</span> Neues Wort</button>
+        <div className="header-actions">
+          <button className="file-action" onClick={() => importInput.current?.click()} title="Sammlung aus einer Datei laden"><span>↑</span><b>Import</b></button>
+          <button className="file-action" onClick={exportWords} title="Sammlung als Datei sichern"><span>↓</span><b>Export</b></button>
+          <button className="primary compact" onClick={openNewForm}><span>＋</span> Neues Wort</button>
+          <input ref={importInput} className="visually-hidden" type="file" accept="application/json,.json" onChange={importWords} aria-label="Wortschatz-Datei auswählen" />
+        </div>
       </header>
+
+      {notice && <div className="notice" role="status">✓ {notice}</div>}
 
       {view === "collection" ? (
         <section className="content">
