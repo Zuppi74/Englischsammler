@@ -279,7 +279,14 @@ export default function Home() {
 
           <div className="card-grid">
             {visibleWords.map((word) => (
-              <article className="word-card" key={word.id}>
+              <article
+                className="word-card"
+                key={word.id}
+                title="Klicken, um diese Karte zu bearbeiten"
+                onClick={(event) => {
+                  if (!(event.target as HTMLElement).closest("button")) openEditForm(word);
+                }}
+              >
                 <div className="card-top">
                   <span className={`status ${word.status}`}>{statusLabels[word.status]}</span>
                   <button className={`favorite ${word.favorite ? "selected" : ""}`} onClick={() => setWords((current) => current.map((item) => item.id === word.id ? { ...item, favorite: !item.favorite } : item))} aria-label="Favorit umschalten">{word.favorite ? "★" : "☆"}</button>
