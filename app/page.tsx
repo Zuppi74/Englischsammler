@@ -48,9 +48,9 @@ const starterWords: WordCard[] = [
 ];
 
 const statusLabels: Record<WordStatus, string> = {
-  new: "Neu",
-  learning: "Am Lernen",
-  learned: "Gelernt",
+  new: "Wiederholen",
+  learning: "Schwierig",
+  learned: "Bekannt",
 };
 
 export default function Home() {
@@ -253,8 +253,8 @@ export default function Home() {
             </div>
             <div className="stats" aria-label="Lernfortschritt">
               <div><strong>{words.length}</strong><span>Wörter</span></div>
-              <div><strong>{words.filter((word) => word.status === "learning").length}</strong><span>Am Lernen</span></div>
-              <div><strong>{words.filter((word) => word.status === "learned").length}</strong><span>Gelernt</span></div>
+              <div><strong>{words.filter((word) => word.status === "learning").length}</strong><span>Schwierig</span></div>
+              <div><strong>{words.filter((word) => word.status === "learned").length}</strong><span>Bekannt</span></div>
             </div>
           </div>
 
@@ -287,6 +287,11 @@ export default function Home() {
                 <h3>{word.english}</h3>
                 <p className="translation">{word.german}</p>
                 <div className="example"><span>“</span>{word.example || "Noch kein Beispielsatz."}</div>
+                <div className="card-rating" aria-label={`Lernstatus für ${word.english}`}>
+                  <button className={word.status === "new" ? "selected repeat" : "repeat"} aria-pressed={word.status === "new"} onClick={() => setWordStatus(word.id, "new")}><span>↻</span>Wiederholen</button>
+                  <button className={word.status === "learning" ? "selected difficult" : "difficult"} aria-pressed={word.status === "learning"} onClick={() => setWordStatus(word.id, "learning")}><span>!</span>Schwierig</button>
+                  <button className={word.status === "learned" ? "selected known" : "known"} aria-pressed={word.status === "learned"} onClick={() => setWordStatus(word.id, "learned")}><span>✓</span>Bekannt</button>
+                </div>
                 <div className="card-footer">
                   <span className="category">{word.category}</span>
                   <div className="card-actions">
@@ -314,7 +319,7 @@ export default function Home() {
                 ) : <span className="reveal-hint">Tippen, um die Antwort zu zeigen</span>}
               </button>
               {revealed && <div className="learn-actions">
-                <button className="again" onClick={() => nextLearnCard("new")}>Nochmals</button>
+                <button className="again" onClick={() => nextLearnCard("new")}>Wiederholen</button>
                 <button className="hard" onClick={() => nextLearnCard("learning")}>Schwierig</button>
                 <button className="known" onClick={() => nextLearnCard("learned")}>Gewusst</button>
               </div>}
