@@ -1,6 +1,7 @@
 "use client";
 
 import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { coreWords } from "./core-words";
 
 type WordStatus = "new" | "learning" | "learned";
 type WordCard = {
@@ -47,6 +48,17 @@ const starterWords: WordCard[] = [
   },
 ];
 
+const coreWordCards: WordCard[] = coreWords.map(([english, german], index) => ({
+  id: `core-${index + 1}`,
+  english,
+  german,
+  example: "",
+  category: "Grundwortschatz",
+  status: "new",
+  favorite: false,
+  createdAt: coreWords.length - index,
+}));
+
 const statusLabels: Record<WordStatus, string> = {
   new: "Wiederholen",
   learning: "Schwierig",
@@ -72,7 +84,19 @@ export default function Home() {
 
   useEffect(() => {
     const saved = window.localStorage.getItem("wortschatz-words");
-    setWords(saved ? JSON.parse(saved) : starterWords);
+    const savedWords: WordCard[] = saved ? JSON.parse(saved) : [];
+    const isDemoCollection = savedWords.length === starterWords.length &&
+      savedWords.every((word) => word.id.startsWith("starter-"));
+
+    if (!saved || isDemoCollection) {
+      setWords(coreWordCards);
+    } else if (!window.localStorage.getItem("wortschatz-core-500-v1")) {
+      const existingEnglish = new Set(savedWords.map((word) => word.english.toLowerCase()));
+      setWords([...savedWords, ...coreWordCards.filter((word) => !existingEnglish.has(word.english.toLowerCase()))]);
+    } else {
+      setWords(savedWords);
+    }
+    window.localStorage.setItem("wortschatz-core-500-v1", "done");
     setReady(true);
   }, []);
 
