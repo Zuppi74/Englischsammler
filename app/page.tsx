@@ -71,6 +71,7 @@ export default function Home() {
   const [view, setView] = useState<"collection" | "learn">("collection");
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | WordStatus | "favorite">("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
   const [formOpen, setFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [english, setEnglish] = useState("");
@@ -111,9 +112,20 @@ export default function Home() {
         .some((value) => value.toLowerCase().includes(needle));
       const matchesFilter = filter === "all" ||
         (filter === "favorite" ? word.favorite : word.status === filter);
-      return matchesText && matchesFilter;
+      const matchesCategory = categoryFilter === "all" || word.category === categoryFilter;
+      return matchesText && matchesFilter && matchesCategory;
     });
-  }, [words, query, filter]);
+  }, [words, query, filter, categoryFilter]);
+
+  const categories = useMemo(
+    () => [...new Set(words.map((word) => word.category).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b, "de")),
+    [words],
+  );
+  const formCategories = useMemo(
+    () => [...new Set(["Grundwortschatz", "Alltag", "Arbeit", "Reisen", "Gefühle", "Sonstiges", ...categories])],
+    [categories],
+  );
 
   const learningWords = words.filter((word) => word.status !== "learned");
   const currentLearnWord = learningWords[learnIndex % Math.max(learningWords.length, 1)];
@@ -239,6 +251,7 @@ export default function Home() {
       });
       setWords(normalized);
       setFilter("all");
+      setCategoryFilter("all");
       setQuery("");
       showNotice(`${normalized.length} Karten wurden erfolgreich geladen.`);
     } catch {
@@ -286,6 +299,13 @@ export default function Home() {
             <label className="search">
               <span>⌕</span>
               <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Wörter durchsuchen …" />
+            </label>
+            <label className="category-filter">
+              <span>Kategorie</span>
+              <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
+                <option value="all">Alle Kategorien</option>
+                {categories.map((item) => <option key={item} value={item}>{item}</option>)}
+              </select>
             </label>
             <div className="filters" aria-label="Karten filtern">
               {(["all", "new", "learning", "learned", "favorite"] as const).map((item) => (
@@ -366,7 +386,7 @@ export default function Home() {
             <label>Englisches Wort oder Wendung<input autoFocus required value={english} onChange={(event) => setEnglish(event.target.value)} placeholder="z. B. to look forward to" /></label>
             <label>Deutsche Übersetzung<input required value={german} onChange={(event) => setGerman(event.target.value)} placeholder="z. B. sich freuen auf" /></label>
             <label>Beispielsatz <span>optional</span><textarea value={example} onChange={(event) => setExample(event.target.value)} placeholder="I look forward to seeing you." /></label>
-            <label>Kategorie<select value={category} onChange={(event) => setCategory(event.target.value)}><option>Alltag</option><option>Arbeit</option><option>Reisen</option><option>Gefühle</option><option>Sonstiges</option></select></label>
+            <label>Kategorie<select value={category} onChange={(event) => setCategory(event.target.value)}>{formCategories.map((item) => <option key={item}>{item}</option>)}</select></label>
             <div className="form-actions"><button type="button" onClick={() => setFormOpen(false)}>Abbrechen</button><button className="primary" type="submit">{editingId ? "Änderungen speichern" : "Karte speichern"}</button></div>
           </form>
         </div>
