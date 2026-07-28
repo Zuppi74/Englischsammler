@@ -1,6 +1,7 @@
 "use client";
 
 import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { businessWords } from "./business-words";
 import { coreWords } from "./core-words";
 
 type WordStatus = "new" | "learning" | "learned";
@@ -59,6 +60,17 @@ const coreWordCards: WordCard[] = coreWords.map(([english, german], index) => ({
   createdAt: coreWords.length - index,
 }));
 
+const businessWordCards: WordCard[] = businessWords.map(([category, english, german, example], index) => ({
+  id: `business-${index + 1}`,
+  english,
+  german,
+  example,
+  category,
+  status: "new",
+  favorite: false,
+  createdAt: businessWords.length - index,
+}));
+
 const statusLabels: Record<WordStatus, string> = {
   new: "Wiederholen",
   learning: "Schwierig",
@@ -88,15 +100,24 @@ export default function Home() {
     const savedWords: WordCard[] = saved ? JSON.parse(saved) : [];
     const isDemoCollection = savedWords.length === starterWords.length &&
       savedWords.every((word) => word.id.startsWith("starter-"));
+    let initialWords: WordCard[];
 
     if (!saved || isDemoCollection) {
-      setWords(coreWordCards);
+      initialWords = coreWordCards;
     } else if (!window.localStorage.getItem("wortschatz-core-500-v1")) {
       const existingEnglish = new Set(savedWords.map((word) => word.english.toLowerCase()));
-      setWords([...savedWords, ...coreWordCards.filter((word) => !existingEnglish.has(word.english.toLowerCase()))]);
+      initialWords = [...savedWords, ...coreWordCards.filter((word) => !existingEnglish.has(word.english.toLowerCase()))];
     } else {
-      setWords(savedWords);
+      initialWords = savedWords;
     }
+
+    if (!window.localStorage.getItem("wortschatz-business-500-v1")) {
+      const existingIds = new Set(initialWords.map((word) => word.id));
+      initialWords = [...initialWords, ...businessWordCards.filter((word) => !existingIds.has(word.id))];
+      window.localStorage.setItem("wortschatz-business-500-v1", "done");
+    }
+
+    setWords(initialWords);
     window.localStorage.setItem("wortschatz-core-500-v1", "done");
     setReady(true);
   }, []);
