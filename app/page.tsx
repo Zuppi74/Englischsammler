@@ -3,6 +3,7 @@
 import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { businessWords } from "./business-words";
 import { coreWords } from "./core-words";
+import { dailyWords } from "./daily-words";
 
 type WordStatus = "new" | "learning" | "learned";
 type WordCard = {
@@ -71,6 +72,24 @@ const businessWordCards: WordCard[] = businessWords.map(([category, english, ger
   createdAt: businessWords.length - index,
 }));
 
+const dailyWordCards: WordCard[] = dailyWords.map(([
+  english,
+  german,
+  example,
+  category = "Alltagssätze",
+  status = "new",
+  favorite = false,
+], index) => ({
+  id: `daily-${index + 1}`,
+  english,
+  german,
+  example,
+  category,
+  status,
+  favorite,
+  createdAt: dailyWords.length - index,
+}));
+
 const statusLabels: Record<WordStatus, string> = {
   new: "Wiederholen",
   learning: "Schwierig",
@@ -100,21 +119,27 @@ export default function Home() {
     const savedWords: WordCard[] = saved ? JSON.parse(saved) : [];
     const isDemoCollection = savedWords.length === starterWords.length &&
       savedWords.every((word) => word.id.startsWith("starter-"));
-    let initialWords: WordCard[];
+    const initialWords: WordCard[] = !saved || isDemoCollection ? [] : savedWords;
 
-    if (!saved || isDemoCollection) {
-      initialWords = coreWordCards;
-    } else if (!window.localStorage.getItem("wortschatz-core-500-v1")) {
-      const existingEnglish = new Set(savedWords.map((word) => word.english.toLowerCase()));
-      initialWords = [...savedWords, ...coreWordCards.filter((word) => !existingEnglish.has(word.english.toLowerCase()))];
-    } else {
-      initialWords = savedWords;
-    }
-
-    if (!window.localStorage.getItem("wortschatz-business-500-v1")) {
+    if (!saved || isDemoCollection || !window.localStorage.getItem("wortschatz-library-1103-v1")) {
+      const normalizedEnglish = (word: WordCard) => word.english.trim().toLocaleLowerCase("en");
       const existingIds = new Set(initialWords.map((word) => word.id));
-      initialWords = [...initialWords, ...businessWordCards.filter((word) => !existingIds.has(word.id))];
-      window.localStorage.setItem("wortschatz-business-500-v1", "done");
+      const existingEnglish = new Set(initialWords.map(normalizedEnglish));
+
+      const addCards = (cards: WordCard[], matchByEnglish: boolean) => {
+        cards.forEach((word) => {
+          const englishKey = normalizedEnglish(word);
+          if (existingIds.has(word.id) || (matchByEnglish && existingEnglish.has(englishKey))) return;
+          initialWords.push(word);
+          existingIds.add(word.id);
+          existingEnglish.add(englishKey);
+        });
+      };
+
+      addCards(coreWordCards, true);
+      addCards(businessWordCards, false);
+      addCards(dailyWordCards, true);
+      window.localStorage.setItem("wortschatz-library-1103-v1", "done");
     }
 
     setWords(initialWords);
