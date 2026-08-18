@@ -189,6 +189,11 @@ export default function Home() {
     setFormOpen(true);
   }
 
+  function goToStart() {
+    setView("collection");
+    window.scrollTo({ top: 0, left: 0, behavior: "smooth" });
+  }
+
   function openEditForm(word: WordCard) {
     setEditingId(word.id);
     setEnglish(word.english);
@@ -308,7 +313,7 @@ export default function Home() {
   return (
     <main className="app-shell">
       <header className="topbar">
-        <button className="brand" onClick={() => setView("collection")} aria-label="Zur Sammlung">
+        <button className="brand" onClick={goToStart} aria-label="Zur Sammlung und nach oben">
           <span className="brand-mark">W</span>
           <span><strong>Wortschatz</strong><small>Dein Englischsammler</small></span>
         </button>
