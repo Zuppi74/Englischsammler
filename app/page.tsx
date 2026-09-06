@@ -6,6 +6,9 @@ import { coreWords } from "./core-words";
 import { dailyWords } from "./daily-words";
 
 type WordStatus = "new" | "learning" | "learned";
+type LearningDirection = "en-de" | "de-en" | "mixed";
+type ReviewRating = "again" | "hard" | "known";
+type DailyActivity = Record<string, { reviewed: number; correct: number; newReviewed: number }>;
 type WordCard = {
   id: string;
   english: string;
@@ -16,7 +19,32 @@ type WordCard = {
   isNew: boolean;
   favorite: boolean;
   createdAt: number;
+  dueAt: number;
+  intervalDays: number;
+  reviewCount: number;
+  wrongCount: number;
+  lastReviewedAt?: number;
 };
+
+const DAY = 24 * 60 * 60 * 1000;
+
+function localDateKey(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function learningStreak(activity: DailyActivity, now: number) {
+  const cursor = new Date(now);
+  if (!activity[localDateKey(cursor)]?.reviewed) cursor.setDate(cursor.getDate() - 1);
+  let streak = 0;
+  while (activity[localDateKey(cursor)]?.reviewed) {
+    streak += 1;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  return streak;
+}
 
 const starterWords: WordCard[] = [
   {
@@ -29,6 +57,10 @@ const starterWords: WordCard[] = [
     isNew: true,
     favorite: true,
     createdAt: 3,
+    dueAt: 0,
+    intervalDays: 0,
+    reviewCount: 0,
+    wrongCount: 0,
   },
   {
     id: "starter-2",
@@ -40,6 +72,10 @@ const starterWords: WordCard[] = [
     isNew: true,
     favorite: false,
     createdAt: 2,
+    dueAt: 0,
+    intervalDays: 0,
+    reviewCount: 0,
+    wrongCount: 0,
   },
   {
     id: "starter-3",
@@ -51,6 +87,10 @@ const starterWords: WordCard[] = [
     isNew: true,
     favorite: false,
     createdAt: 1,
+    dueAt: 0,
+    intervalDays: 0,
+    reviewCount: 0,
+    wrongCount: 0,
   },
 ];
 
@@ -64,6 +104,10 @@ const coreWordCards: WordCard[] = coreWords.map(([english, german], index) => ({
   isNew: true,
   favorite: false,
   createdAt: coreWords.length - index,
+  dueAt: 0,
+  intervalDays: 0,
+  reviewCount: 0,
+  wrongCount: 0,
 }));
 
 const businessWordCards: WordCard[] = businessWords.map(([category, english, german, example], index) => ({
@@ -76,6 +120,10 @@ const businessWordCards: WordCard[] = businessWords.map(([category, english, ger
   isNew: true,
   favorite: false,
   createdAt: businessWords.length - index,
+  dueAt: 0,
+  intervalDays: 0,
+  reviewCount: 0,
+  wrongCount: 0,
 }));
 
 const dailyWordCards: WordCard[] = dailyWords.map(([
@@ -95,6 +143,10 @@ const dailyWordCards: WordCard[] = dailyWords.map(([
   isNew: true,
   favorite,
   createdAt: dailyWords.length - index,
+  dueAt: 0,
+  intervalDays: 0,
+  reviewCount: 0,
+  wrongCount: 0,
 }));
 
 const statusLabels: Record<WordStatus, string> = {
@@ -108,7 +160,7 @@ export default function Home() {
   const [ready, setReady] = useState(false);
   const [view, setView] = useState<"collection" | "learn">("collection");
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<"all" | WordStatus | "favorite" | "marked-new">("all");
+  const [filter, setFilter] = useState<"all" | WordStatus | "favorite" | "marked-new" | "problem">("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [formOpen, setFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -117,7 +169,12 @@ export default function Home() {
   const [example, setExample] = useState("");
   const [category, setCategory] = useState("Alltag");
   const [learnIndex, setLearnIndex] = useState(0);
+  const [sessionWordIds, setSessionWordIds] = useState<string[]>([]);
   const [revealed, setRevealed] = useState(false);
+  const [direction, setDirection] = useState<LearningDirection>("mixed");
+  const [goals, setGoals] = useState({ newCards: 10, reviews: 30 });
+  const [activity, setActivity] = useState<DailyActivity>({});
+  const [clock, setClock] = useState(() => Date.now());
   const [notice, setNotice] = useState("");
   const importInput = useRef<HTMLInputElement>(null);
 
@@ -128,7 +185,14 @@ export default function Home() {
       savedWords.every((word) => word.id.startsWith("starter-"));
     const initialWords: WordCard[] = !saved || isDemoCollection
       ? []
-      : savedWords.map((word) => ({ ...word, isNew: word.isNew !== false }));
+      : savedWords.map((word) => ({
+        ...word,
+        isNew: word.isNew !== false,
+        dueAt: typeof word.dueAt === "number" ? word.dueAt : 0,
+        intervalDays: typeof word.intervalDays === "number" ? word.intervalDays : 0,
+        reviewCount: typeof word.reviewCount === "number" ? word.reviewCount : 0,
+        wrongCount: typeof word.wrongCount === "number" ? word.wrongCount : 0,
+      }));
 
     if (!saved || isDemoCollection || !window.localStorage.getItem("wortschatz-library-1103-v1")) {
       const normalizedEnglish = (word: WordCard) => word.english.trim().toLocaleLowerCase("en");
@@ -151,14 +215,32 @@ export default function Home() {
       window.localStorage.setItem("wortschatz-library-1103-v1", "done");
     }
 
-    setWords(initialWords);
+    const savedActivity = window.localStorage.getItem("wortschatz-activity");
+    const savedGoals = window.localStorage.getItem("wortschatz-goals");
+    const savedDirection = window.localStorage.getItem("wortschatz-direction");
     window.localStorage.setItem("wortschatz-core-500-v1", "done");
-    setReady(true);
+    const initialize = window.setTimeout(() => {
+      setWords(initialWords);
+      if (savedActivity) setActivity(JSON.parse(savedActivity));
+      if (savedGoals) setGoals(JSON.parse(savedGoals));
+      if (savedDirection === "en-de" || savedDirection === "de-en" || savedDirection === "mixed") setDirection(savedDirection);
+      setReady(true);
+    }, 0);
+    return () => window.clearTimeout(initialize);
   }, []);
 
   useEffect(() => {
-    if (ready) window.localStorage.setItem("wortschatz-words", JSON.stringify(words));
-  }, [words, ready]);
+    const timer = window.setInterval(() => setClock(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!ready) return;
+    window.localStorage.setItem("wortschatz-words", JSON.stringify(words));
+    window.localStorage.setItem("wortschatz-activity", JSON.stringify(activity));
+    window.localStorage.setItem("wortschatz-goals", JSON.stringify(goals));
+    window.localStorage.setItem("wortschatz-direction", direction);
+  }, [words, activity, goals, direction, ready]);
 
   const visibleWords = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -167,7 +249,8 @@ export default function Home() {
         .some((value) => value.toLowerCase().includes(needle));
       const matchesFilter = filter === "all" ||
         (filter === "favorite" ? word.favorite :
-          filter === "marked-new" ? word.isNew : word.status === filter);
+          filter === "marked-new" ? word.isNew :
+            filter === "problem" ? word.wrongCount >= 2 : word.status === filter);
       const matchesCategory = categoryFilter === "all" || word.category === categoryFilter;
       return matchesText && matchesFilter && matchesCategory;
     });
@@ -183,8 +266,21 @@ export default function Home() {
     [categories],
   );
 
-  const learningWords = words.filter((word) => word.status !== "learned");
-  const currentLearnWord = learningWords[learnIndex % Math.max(learningWords.length, 1)];
+  const todayKey = localDateKey(new Date(clock));
+  const todayActivity = activity[todayKey] ?? { reviewed: 0, correct: 0, newReviewed: 0 };
+  const todayReviews = Math.max(0, todayActivity.reviewed - todayActivity.newReviewed);
+  const dueWords = words.filter((word) => !word.isNew && word.dueAt <= clock);
+  const problemWords = words.filter((word) => word.wrongCount >= 2);
+  const totalActivity = Object.values(activity).reduce((sum, day) => ({
+    reviewed: sum.reviewed + day.reviewed,
+    correct: sum.correct + day.correct,
+  }), { reviewed: 0, correct: 0 });
+  const accuracy = totalActivity.reviewed ? Math.round(totalActivity.correct / totalActivity.reviewed * 100) : 0;
+  const streak = learningStreak(activity, clock);
+  const currentLearnWord = words.find((word) => word.id === sessionWordIds[learnIndex]);
+  const activeDirection: Exclude<LearningDirection, "mixed"> = direction === "mixed"
+    ? (learnIndex % 2 === 0 ? "de-en" : "en-de")
+    : direction;
 
   function resetForm() {
     setEditingId(null);
@@ -202,6 +298,24 @@ export default function Home() {
   function goToStart() {
     setView("collection");
     window.scrollTo({ top: 0, left: 0, behavior: "smooth" });
+  }
+
+  function startLearning() {
+    const remainingNew = Math.max(0, goals.newCards - todayActivity.newReviewed);
+    const remainingReviews = Math.max(0, goals.reviews - todayReviews);
+    const due = words
+      .filter((word) => !word.isNew && word.dueAt <= Date.now())
+      .sort((a, b) => a.dueAt - b.dueAt)
+      .slice(0, remainingReviews);
+    const fresh = words
+      .filter((word) => word.isNew)
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, remainingNew);
+
+    setSessionWordIds([...due, ...fresh].map((word) => word.id));
+    setLearnIndex(0);
+    setRevealed(false);
+    setView("learn");
   }
 
   function openEditForm(word: WordCard) {
@@ -231,6 +345,10 @@ export default function Home() {
         isNew: true,
         favorite: false,
         createdAt: Date.now(),
+        dueAt: 0,
+        intervalDays: 0,
+        reviewCount: 0,
+        wrongCount: 0,
       }, ...current]);
     }
     setFormOpen(false);
@@ -241,8 +359,40 @@ export default function Home() {
     setWords((current) => current.map((word) => word.id === id ? { ...word, status } : word));
   }
 
-  function nextLearnCard(status?: WordStatus) {
-    if (currentLearnWord && status) setWordStatus(currentLearnWord.id, status);
+  function reviewLearnCard(rating: ReviewRating) {
+    if (!currentLearnWord) return;
+    const now = Date.now();
+    const wasNew = currentLearnWord.isNew;
+    setWords((current) => current.map((word) => {
+      if (word.id !== currentLearnWord.id) return word;
+      const intervalDays = rating === "again"
+        ? 0
+        : rating === "hard"
+          ? Math.max(1, Math.round(Math.max(1, word.intervalDays) * 1.5))
+          : word.intervalDays > 0 ? Math.max(3, Math.round(word.intervalDays * 2.2)) : 3;
+      const dueAt = rating === "again" ? now + 10 * 60 * 1000 : now + intervalDays * DAY;
+      return {
+        ...word,
+        status: rating === "again" ? "new" : rating === "hard" ? "learning" : "learned",
+        isNew: false,
+        dueAt,
+        intervalDays,
+        reviewCount: word.reviewCount + 1,
+        wrongCount: rating === "known" ? Math.max(0, word.wrongCount - 1) : word.wrongCount + 1,
+        lastReviewedAt: now,
+      };
+    }));
+    setActivity((current) => {
+      const today = current[todayKey] ?? { reviewed: 0, correct: 0, newReviewed: 0 };
+      return {
+        ...current,
+        [todayKey]: {
+          reviewed: today.reviewed + 1,
+          correct: today.correct + (rating === "known" ? 1 : 0),
+          newReviewed: today.newReviewed + (wasNew ? 1 : 0),
+        },
+      };
+    });
     setRevealed(false);
     setLearnIndex((index) => index + 1);
   }
@@ -257,9 +407,12 @@ export default function Home() {
     const fileName = `wortschatz-${date}.json`;
     const contents = JSON.stringify({
       format: "wortschatz-export",
-      version: 1,
+      version: 2,
       exportedAt: new Date().toISOString(),
       words,
+      activity,
+      goals,
+      direction,
     }, null, 2);
     const file = new File([contents], fileName, { type: "application/json" });
 
@@ -288,7 +441,7 @@ export default function Home() {
     if (!file) return;
 
     try {
-      const parsed = JSON.parse(await file.text()) as { words?: unknown } | unknown[];
+      const parsed = JSON.parse(await file.text()) as { words?: unknown; activity?: unknown; goals?: unknown; direction?: unknown } | unknown[];
       const imported = Array.isArray(parsed) ? parsed : parsed.words;
       if (!Array.isArray(imported) || !imported.every((word) =>
         word && typeof word === "object" &&
@@ -310,9 +463,17 @@ export default function Home() {
           isNew: word.isNew !== false,
           favorite: word.favorite === true,
           createdAt: typeof word.createdAt === "number" ? word.createdAt : Date.now(),
+          dueAt: typeof word.dueAt === "number" ? word.dueAt : 0,
+          intervalDays: typeof word.intervalDays === "number" ? word.intervalDays : 0,
+          reviewCount: typeof word.reviewCount === "number" ? word.reviewCount : 0,
+          wrongCount: typeof word.wrongCount === "number" ? word.wrongCount : 0,
+          lastReviewedAt: typeof word.lastReviewedAt === "number" ? word.lastReviewedAt : undefined,
         };
       });
       setWords(normalized);
+      if (!Array.isArray(parsed) && parsed.activity && typeof parsed.activity === "object") setActivity(parsed.activity as DailyActivity);
+      if (!Array.isArray(parsed) && parsed.goals && typeof parsed.goals === "object") setGoals(parsed.goals as { newCards: number; reviews: number });
+      if (!Array.isArray(parsed) && (parsed.direction === "en-de" || parsed.direction === "de-en" || parsed.direction === "mixed")) setDirection(parsed.direction);
       setFilter("all");
       setCategoryFilter("all");
       setQuery("");
@@ -331,7 +492,7 @@ export default function Home() {
         </button>
         <nav aria-label="Hauptnavigation">
           <button className={view === "collection" ? "active" : ""} onClick={() => setView("collection")}>Sammlung</button>
-          <button className={view === "learn" ? "active" : ""} onClick={() => { setView("learn"); setRevealed(false); }}>Lernen</button>
+          <button className={view === "learn" ? "active" : ""} onClick={startLearning}>Lernen</button>
         </nav>
         <div className="header-actions">
           <button className="file-action" onClick={() => importInput.current?.click()} title="Sammlung aus einer Datei laden"><span>↑</span><b>Import</b></button>
@@ -358,6 +519,29 @@ export default function Home() {
             </div>
           </div>
 
+          <section className="learning-dashboard" aria-label="Heutiger Lernfortschritt">
+            <div className="dashboard-heading">
+              <div><p className="eyebrow">Heute lernen</p><h2>Dein Tagesplan</h2></div>
+              <button className="primary" onClick={startLearning}>Jetzt lernen <span>→</span></button>
+            </div>
+            <div className="goal-grid">
+              <div className="goal-card">
+                <div><span>Neue Karten</span><strong>{Math.min(todayActivity.newReviewed, goals.newCards)} / {goals.newCards}</strong></div>
+                <div className="progress-track"><span style={{ width: `${Math.min(100, todayActivity.newReviewed / Math.max(1, goals.newCards) * 100)}%` }} /></div>
+                <label>Tagesziel <input type="number" min="1" max="100" value={goals.newCards} onChange={(event) => setGoals((current) => ({ ...current, newCards: Math.max(1, Number(event.target.value) || 1) }))} /></label>
+              </div>
+              <div className="goal-card">
+                <div><span>Wiederholungen</span><strong>{Math.min(todayReviews, goals.reviews)} / {goals.reviews}</strong></div>
+                <div className="progress-track"><span style={{ width: `${Math.min(100, todayReviews / Math.max(1, goals.reviews) * 100)}%` }} /></div>
+                <label>Tagesziel <input type="number" min="1" max="200" value={goals.reviews} onChange={(event) => setGoals((current) => ({ ...current, reviews: Math.max(1, Number(event.target.value) || 1) }))} /></label>
+              </div>
+              <div className="metric-card"><span>Heute fällig</span><strong>{dueWords.length}</strong><small>automatisch geplant</small></div>
+              <div className="metric-card"><span>Trefferquote</span><strong>{accuracy}%</strong><small>{totalActivity.reviewed} Antworten</small></div>
+              <div className="metric-card"><span>Lernserie</span><strong>{streak}</strong><small>{streak === 1 ? "Tag" : "Tage"} in Folge</small></div>
+              <button className="metric-card problem-link" onClick={() => setFilter("problem")}><span>Problemwörter</span><strong>{problemWords.length}</strong><small>zweimal oder öfter schwierig</small></button>
+            </div>
+          </section>
+
           <div className="toolbar">
             <label className="search">
               <span>⌕</span>
@@ -371,9 +555,9 @@ export default function Home() {
               </select>
             </label>
             <div className="filters" aria-label="Karten filtern">
-              {(["all", "marked-new", "new", "learning", "learned", "favorite"] as const).map((item) => (
+              {(["all", "marked-new", "problem", "new", "learning", "learned", "favorite"] as const).map((item) => (
                 <button key={item} className={filter === item ? "active" : ""} onClick={() => setFilter(item)}>
-                  {item === "all" ? "Alle" : item === "marked-new" ? "Neu" : item === "favorite" ? "Favoriten" : statusLabels[item]}
+                  {item === "all" ? "Alle" : item === "marked-new" ? "Neu" : item === "problem" ? "Problemwörter" : item === "favorite" ? "Favoriten" : statusLabels[item]}
                 </button>
               ))}
             </div>
@@ -403,6 +587,7 @@ export default function Home() {
                       aria-label={`${word.english} als neu markieren`}
                       onClick={() => setWords((current) => current.map((item) => item.id === word.id ? { ...item, isNew: !item.isNew } : item))}
                     >Neu</button>
+                    {word.wrongCount >= 2 && <span className="problem-marker">Problemwort</span>}
                   </div>
                   <button className={`favorite ${word.favorite ? "selected" : ""}`} onClick={() => setWords((current) => current.map((item) => item.id === word.id ? { ...item, favorite: !item.favorite } : item))} aria-label="Favorit umschalten">{word.favorite ? "★" : "☆"}</button>
                 </div>
@@ -430,23 +615,30 @@ export default function Home() {
         <section className="learn-view">
           <p className="eyebrow">Lernmodus</p>
           <h1>Eine Karte nach der anderen.</h1>
+          <div className="direction-picker" aria-label="Lernrichtung wählen">
+            {(["de-en", "en-de", "mixed"] as const).map((item) => (
+              <button key={item} className={direction === item ? "active" : ""} onClick={() => setDirection(item)}>
+                {item === "de-en" ? "Deutsch → Englisch" : item === "en-de" ? "Englisch → Deutsch" : "Gemischt"}
+              </button>
+            ))}
+          </div>
           {currentLearnWord ? (
             <>
-              <p className="learn-progress">Karte {(learnIndex % learningWords.length) + 1} von {learningWords.length}</p>
+              <p className="learn-progress">Karte {learnIndex + 1} von {sessionWordIds.length}</p>
               <button className={`learn-card ${revealed ? "revealed" : ""}`} onClick={() => setRevealed(true)}>
-                <span className="learn-label">Englisch</span>
-                <strong>{currentLearnWord.english}</strong>
+                <span className="learn-label">{activeDirection === "en-de" ? "Englisch" : "Deutsch"}</span>
+                <strong>{activeDirection === "en-de" ? currentLearnWord.english : currentLearnWord.german}</strong>
                 {revealed ? (
-                  <span className="learn-answer"><i>Deutsch</i>{currentLearnWord.german}<small>{currentLearnWord.example}</small></span>
+                  <span className="learn-answer"><i>{activeDirection === "en-de" ? "Deutsch" : "Englisch"}</i>{activeDirection === "en-de" ? currentLearnWord.german : currentLearnWord.english}<small>{currentLearnWord.example}</small></span>
                 ) : <span className="reveal-hint">Tippen, um die Antwort zu zeigen</span>}
               </button>
               {revealed && <div className="learn-actions">
-                <button className="again" onClick={() => nextLearnCard("new")}>Wiederholen</button>
-                <button className="hard" onClick={() => nextLearnCard("learning")}>Schwierig</button>
-                <button className="known" onClick={() => nextLearnCard("learned")}>Gewusst</button>
+                <button className="again" onClick={() => reviewLearnCard("again")}><strong>Wiederholen</strong><small>in 10 Minuten</small></button>
+                <button className="hard" onClick={() => reviewLearnCard("hard")}><strong>Schwierig</strong><small>morgen</small></button>
+                <button className="known" onClick={() => reviewLearnCard("known")}><strong>Gewusst</strong><small>in {currentLearnWord.intervalDays > 0 ? Math.max(3, Math.round(currentLearnWord.intervalDays * 2.2)) : 3} Tagen</small></button>
               </div>}
             </>
-          ) : <div className="empty-state"><strong>Alles gelernt!</strong><p>Du hast im Moment keine offenen Karten.</p></div>}
+          ) : <div className="empty-state"><strong>Tagesrunde geschafft!</strong><p>Deine heutigen neuen Karten und fälligen Wiederholungen sind erledigt.</p><button className="primary" onClick={goToStart}>Zur Übersicht</button></div>}
         </section>
       )}
 
