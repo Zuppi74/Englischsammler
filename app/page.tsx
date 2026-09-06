@@ -13,6 +13,7 @@ type WordCard = {
   example: string;
   category: string;
   status: WordStatus;
+  isNew: boolean;
   favorite: boolean;
   createdAt: number;
 };
@@ -25,6 +26,7 @@ const starterWords: WordCard[] = [
     example: "I need to figure out how this works.",
     category: "Alltag",
     status: "learning",
+    isNew: true,
     favorite: true,
     createdAt: 3,
   },
@@ -35,6 +37,7 @@ const starterWords: WordCard[] = [
     example: "She made remarkable progress.",
     category: "Arbeit",
     status: "new",
+    isNew: true,
     favorite: false,
     createdAt: 2,
   },
@@ -45,6 +48,7 @@ const starterWords: WordCard[] = [
     example: "Eventually, everything fell into place.",
     category: "Alltag",
     status: "learned",
+    isNew: true,
     favorite: false,
     createdAt: 1,
   },
@@ -57,6 +61,7 @@ const coreWordCards: WordCard[] = coreWords.map(([english, german], index) => ({
   example: "",
   category: "Grundwortschatz",
   status: "new",
+  isNew: true,
   favorite: false,
   createdAt: coreWords.length - index,
 }));
@@ -68,6 +73,7 @@ const businessWordCards: WordCard[] = businessWords.map(([category, english, ger
   example,
   category,
   status: "new",
+  isNew: true,
   favorite: false,
   createdAt: businessWords.length - index,
 }));
@@ -86,6 +92,7 @@ const dailyWordCards: WordCard[] = dailyWords.map(([
   example,
   category,
   status,
+  isNew: true,
   favorite,
   createdAt: dailyWords.length - index,
 }));
@@ -101,7 +108,7 @@ export default function Home() {
   const [ready, setReady] = useState(false);
   const [view, setView] = useState<"collection" | "learn">("collection");
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<"all" | WordStatus | "favorite">("all");
+  const [filter, setFilter] = useState<"all" | WordStatus | "favorite" | "marked-new">("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [formOpen, setFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -119,7 +126,9 @@ export default function Home() {
     const savedWords: WordCard[] = saved ? JSON.parse(saved) : [];
     const isDemoCollection = savedWords.length === starterWords.length &&
       savedWords.every((word) => word.id.startsWith("starter-"));
-    const initialWords: WordCard[] = !saved || isDemoCollection ? [] : savedWords;
+    const initialWords: WordCard[] = !saved || isDemoCollection
+      ? []
+      : savedWords.map((word) => ({ ...word, isNew: word.isNew !== false }));
 
     if (!saved || isDemoCollection || !window.localStorage.getItem("wortschatz-library-1103-v1")) {
       const normalizedEnglish = (word: WordCard) => word.english.trim().toLocaleLowerCase("en");
@@ -157,7 +166,8 @@ export default function Home() {
       const matchesText = !needle || [word.english, word.german, word.example, word.category]
         .some((value) => value.toLowerCase().includes(needle));
       const matchesFilter = filter === "all" ||
-        (filter === "favorite" ? word.favorite : word.status === filter);
+        (filter === "favorite" ? word.favorite :
+          filter === "marked-new" ? word.isNew : word.status === filter);
       const matchesCategory = categoryFilter === "all" || word.category === categoryFilter;
       return matchesText && matchesFilter && matchesCategory;
     });
@@ -218,6 +228,7 @@ export default function Home() {
         example: example.trim(),
         category,
         status: "new",
+        isNew: true,
         favorite: false,
         createdAt: Date.now(),
       }, ...current]);
@@ -296,6 +307,7 @@ export default function Home() {
           example: typeof word.example === "string" ? word.example : "",
           category: typeof word.category === "string" ? word.category : "Sonstiges",
           status: word.status === "learning" || word.status === "learned" ? word.status : "new",
+          isNew: word.isNew !== false,
           favorite: word.favorite === true,
           createdAt: typeof word.createdAt === "number" ? word.createdAt : Date.now(),
         };
@@ -359,9 +371,9 @@ export default function Home() {
               </select>
             </label>
             <div className="filters" aria-label="Karten filtern">
-              {(["all", "new", "learning", "learned", "favorite"] as const).map((item) => (
+              {(["all", "marked-new", "new", "learning", "learned", "favorite"] as const).map((item) => (
                 <button key={item} className={filter === item ? "active" : ""} onClick={() => setFilter(item)}>
-                  {item === "all" ? "Alle" : item === "favorite" ? "Favoriten" : statusLabels[item]}
+                  {item === "all" ? "Alle" : item === "marked-new" ? "Neu" : item === "favorite" ? "Favoriten" : statusLabels[item]}
                 </button>
               ))}
             </div>
@@ -383,7 +395,15 @@ export default function Home() {
                 }}
               >
                 <div className="card-top">
-                  <span className={`status ${word.status}`}>{statusLabels[word.status]}</span>
+                  <div className="card-badges">
+                    <span className={`status ${word.status}`}>{statusLabels[word.status]}</span>
+                    <button
+                      className={`new-marker ${word.isNew ? "selected" : ""}`}
+                      aria-pressed={word.isNew}
+                      aria-label={`${word.english} als neu markieren`}
+                      onClick={() => setWords((current) => current.map((item) => item.id === word.id ? { ...item, isNew: !item.isNew } : item))}
+                    >Neu</button>
+                  </div>
                   <button className={`favorite ${word.favorite ? "selected" : ""}`} onClick={() => setWords((current) => current.map((item) => item.id === word.id ? { ...item, favorite: !item.favorite } : item))} aria-label="Favorit umschalten">{word.favorite ? "★" : "☆"}</button>
                 </div>
                 <h3>{word.english}</h3>
