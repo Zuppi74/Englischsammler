@@ -3,6 +3,7 @@
 import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { businessWords } from "./business-words";
 import { coreWords } from "./core-words";
+import { coreExamples } from "./core-examples";
 import { dailyWords } from "./daily-words";
 
 type WordStatus = "new" | "learning" | "learned";
@@ -99,7 +100,7 @@ const coreWordCards: WordCard[] = coreWords.map(([english, german], index) => ({
   id: `core-${index + 1}`,
   english,
   german,
-  example: "",
+  example: coreExamples[index] ?? "",
   category: "Grundwortschatz",
   status: "new",
   isNew: true,
@@ -214,6 +215,16 @@ export default function Home() {
       addCards(businessWordCards, false);
       addCards(dailyWordCards, true);
       window.localStorage.setItem("wortschatz-library-1103-v1", "done");
+    }
+
+    if (!window.localStorage.getItem("wortschatz-core-examples-v1")) {
+      const examplesById = new Map(coreWordCards.map((word) => [word.id, word.example]));
+      initialWords.forEach((word) => {
+        if (word.category === "Grundwortschatz" && !word.example.trim()) {
+          word.example = examplesById.get(word.id) ?? "";
+        }
+      });
+      window.localStorage.setItem("wortschatz-core-examples-v1", "done");
     }
 
     const savedActivity = window.localStorage.getItem("wortschatz-activity");
