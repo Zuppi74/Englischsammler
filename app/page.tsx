@@ -416,6 +416,23 @@ export default function Home() {
     window.setTimeout(() => setNotice(""), 3500);
   }
 
+  function speakEnglish(text: string) {
+    if (!("speechSynthesis" in window)) {
+      showNotice("Die Sprachausgabe wird von diesem Gerät nicht unterstützt.");
+      return;
+    }
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = "en-GB";
+    utterance.rate = 0.85;
+    const voices = window.speechSynthesis.getVoices();
+    utterance.voice = voices.find((voice) => voice.lang.toLowerCase().startsWith("en-gb"))
+      ?? voices.find((voice) => voice.lang.toLowerCase().startsWith("en"))
+      ?? null;
+    utterance.onerror = () => showNotice("Das Wort konnte nicht vorgelesen werden.");
+    window.speechSynthesis.speak(utterance);
+  }
+
   async function exportWords() {
     const date = new Date().toISOString().slice(0, 10);
     const fileName = `wortschatz-${date}.json`;
@@ -603,7 +620,10 @@ export default function Home() {
                     >Neu</button>
                     {word.wrongCount >= 2 && <span className="problem-marker">Problemwort</span>}
                   </div>
-                  <button className={`favorite ${word.favorite ? "selected" : ""}`} onClick={() => setWords((current) => current.map((item) => item.id === word.id ? { ...item, favorite: !item.favorite } : item))} aria-label="Favorit umschalten">{word.favorite ? "★" : "☆"}</button>
+                  <div className="card-quick-actions">
+                    <button className="speak-button" onClick={() => speakEnglish(word.english)} aria-label={`${word.english} vorlesen`} title="Englisch vorlesen">🔊</button>
+                    <button className={`favorite ${word.favorite ? "selected" : ""}`} onClick={() => setWords((current) => current.map((item) => item.id === word.id ? { ...item, favorite: !item.favorite } : item))} aria-label="Favorit umschalten">{word.favorite ? "★" : "☆"}</button>
+                  </div>
                 </div>
                 <h3>{word.english}</h3>
                 <p className="translation">{word.german}</p>
@@ -646,6 +666,7 @@ export default function Home() {
                   <span className="learn-answer"><i>{activeDirection === "en-de" ? "Deutsch" : "Englisch"}</i>{activeDirection === "en-de" ? currentLearnWord.german : currentLearnWord.english}<small>{currentLearnWord.example}</small></span>
                 ) : <span className="reveal-hint">Tippen, um die Antwort zu zeigen</span>}
               </button>
+              <button className="learn-speak" onClick={() => speakEnglish(currentLearnWord.english)} aria-label={`${currentLearnWord.english} vorlesen`}><span>🔊</span> Englisches Wort anhören</button>
               {revealed && <div className="learn-actions">
                 <button className="again" onClick={() => reviewLearnCard("again")}><strong>Wiederholen</strong><small>in 10 Minuten</small></button>
                 <button className="hard" onClick={() => reviewLearnCard("hard")}><strong>Schwierig</strong><small>morgen</small></button>
