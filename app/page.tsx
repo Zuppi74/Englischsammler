@@ -2,6 +2,7 @@
 
 import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { businessWords } from "./business-words";
+import { coreExampleTranslations } from "./core-example-translations";
 import { coreWords } from "./core-words";
 import { coreExamples } from "./core-examples";
 import { dailyWords } from "./daily-words";
@@ -15,6 +16,7 @@ type WordCard = {
   english: string;
   german: string;
   example: string;
+  exampleGerman?: string;
   category: string;
   status: WordStatus;
   isNew: boolean;
@@ -101,6 +103,7 @@ const coreWordCards: WordCard[] = coreWords.map(([english, german], index) => ({
   english,
   german,
   example: coreExamples[index] ?? "",
+  exampleGerman: coreExampleTranslations[index] ?? "",
   category: "Grundwortschatz",
   status: "new",
   isNew: true,
@@ -226,6 +229,16 @@ export default function Home() {
         }
       });
       window.localStorage.setItem("wortschatz-core-examples-v1", "done");
+    }
+
+    if (!window.localStorage.getItem("wortschatz-core-example-translations-v1")) {
+      const translationsById = new Map(coreWordCards.map((word) => [word.id, word.exampleGerman]));
+      initialWords.forEach((word) => {
+        if (word.category === "Grundwortschatz" && !word.exampleGerman?.trim()) {
+          word.exampleGerman = translationsById.get(word.id) ?? "";
+        }
+      });
+      window.localStorage.setItem("wortschatz-core-example-translations-v1", "done");
     }
 
     const savedActivity = window.localStorage.getItem("wortschatz-activity");
@@ -516,6 +529,7 @@ export default function Home() {
           english: word.english?.trim() || "",
           german: word.german?.trim() || "",
           example: typeof word.example === "string" ? word.example : "",
+          exampleGerman: typeof word.exampleGerman === "string" ? word.exampleGerman : "",
           category: typeof word.category === "string" ? word.category : "Sonstiges",
           status: word.status === "learning" || word.status === "learned" ? word.status : "new",
           isNew: word.isNew !== false,
@@ -657,7 +671,7 @@ export default function Home() {
                 </div>
                 <h3>{word.english}</h3>
                 <p className="translation">{word.german}</p>
-                <div className="example"><span>“</span>{word.example || "Noch kein Beispielsatz."}</div>
+                <div className="example"><span>“</span><div>{word.example || "Noch kein Beispielsatz."}{word.exampleGerman && <small>{word.exampleGerman}</small>}</div></div>
                 <div className="card-rating" aria-label={`Lernstatus für ${word.english}`}>
                   <button className={word.status === "new" ? "selected repeat" : "repeat"} aria-pressed={word.status === "new"} onClick={() => setWordStatus(word.id, "new")}><span>↻</span>Wiederholen</button>
                   <button className={word.status === "learning" ? "selected difficult" : "difficult"} aria-pressed={word.status === "learning"} onClick={() => setWordStatus(word.id, "learning")}><span>!</span>Schwierig</button>
@@ -696,7 +710,7 @@ export default function Home() {
                 <span className="learn-label">{activeDirection === "en-de" ? "Englisch" : "Deutsch"}</span>
                 <strong>{activeDirection === "en-de" ? currentLearnWord.english : currentLearnWord.german}</strong>
                 {revealed ? (
-                  <span className="learn-answer"><i>{activeDirection === "en-de" ? "Deutsch" : "Englisch"}</i>{activeDirection === "en-de" ? currentLearnWord.german : currentLearnWord.english}<small>{currentLearnWord.example}</small></span>
+                  <span className="learn-answer"><i>{activeDirection === "en-de" ? "Deutsch" : "Englisch"}</i>{activeDirection === "en-de" ? currentLearnWord.german : currentLearnWord.english}<small>{currentLearnWord.example}</small>{currentLearnWord.exampleGerman && <small className="example-german">{currentLearnWord.exampleGerman}</small>}</span>
                 ) : <span className="reveal-hint">Tippen, um die Antwort zu zeigen</span>}
               </button>
               <button className="learn-speak" onClick={() => speakEnglish(currentLearnWord.english)} aria-label={`${currentLearnWord.english} vorlesen`}><span>🔊</span> Englisches Wort anhören</button>
