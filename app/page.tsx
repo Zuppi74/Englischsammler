@@ -514,16 +514,49 @@ export default function Home() {
       showNotice("Die Sprachausgabe wird von diesem Gerät nicht unterstützt.");
       return;
     }
+
     window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = "en-GB";
-    utterance.rate = 0.85;
-    const voices = window.speechSynthesis.getVoices();
-    utterance.voice = voices.find((voice) => voice.lang.toLowerCase().startsWith("en-gb"))
-      ?? voices.find((voice) => voice.lang.toLowerCase().startsWith("en"))
-      ?? null;
-    utterance.onerror = () => showNotice("Das Wort konnte nicht vorgelesen werden.");
-    window.speechSynthesis.speak(utterance);
+
+    const speakWithAvailableVoices = () => {
+      const voices = window.speechSynthesis.getVoices();
+      const preferredNames = /enhanced|premium|natural|neural|siri|serena|daniel|samantha|ava|sonia|google uk english female/i;
+      const noveltyNames = /albert|bad news|bahh|bells|boing|bubbles|cellos|good news|jester|organ|superstar|trinoids|whisper|wobble|zarvox/i;
+      const englishVoices = voices
+        .filter((voice) => voice.lang.toLowerCase().startsWith("en"))
+        .sort((left, right) => {
+          const score = (voice: SpeechSynthesisVoice) =>
+            (preferredNames.test(voice.name) ? 100 : 0) +
+            (voice.lang.toLowerCase().startsWith("en-gb") ? 40 : 0) +
+            (voice.localService ? 5 : 0) +
+            (voice.default ? 3 : 0) -
+            (noveltyNames.test(voice.name) ? 200 : 0);
+          return score(right) - score(left);
+        });
+
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = englishVoices[0]?.lang || "en-GB";
+      utterance.voice = englishVoices[0] ?? null;
+      utterance.rate = 0.9;
+      utterance.pitch = 1.04;
+      utterance.volume = 1;
+      utterance.onerror = () => showNotice("Der Satz konnte nicht vorgelesen werden.");
+      window.speechSynthesis.speak(utterance);
+    };
+
+    if (window.speechSynthesis.getVoices().length) {
+      speakWithAvailableVoices();
+      return;
+    }
+
+    let started = false;
+    const startWhenReady = () => {
+      if (started) return;
+      started = true;
+      window.speechSynthesis.removeEventListener("voiceschanged", startWhenReady);
+      speakWithAvailableVoices();
+    };
+    window.speechSynthesis.addEventListener("voiceschanged", startWhenReady);
+    window.setTimeout(startWhenReady, 180);
   }
 
   async function exportWords() {
