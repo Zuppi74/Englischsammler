@@ -174,6 +174,7 @@ export default function Home() {
   const [sessionWordIds, setSessionWordIds] = useState<string[]>([]);
   const [revealed, setRevealed] = useState(false);
   const [direction, setDirection] = useState<LearningDirection>("mixed");
+  const [learningCategory, setLearningCategory] = useState("all");
   const [goals, setGoals] = useState({ newCards: 10, reviews: 30 });
   const [activity, setActivity] = useState<DailyActivity>({});
   const [clock, setClock] = useState(() => Date.now());
@@ -230,12 +231,14 @@ export default function Home() {
     const savedActivity = window.localStorage.getItem("wortschatz-activity");
     const savedGoals = window.localStorage.getItem("wortschatz-goals");
     const savedDirection = window.localStorage.getItem("wortschatz-direction");
+    const savedLearningCategory = window.localStorage.getItem("wortschatz-learning-category");
     window.localStorage.setItem("wortschatz-core-500-v1", "done");
     const initialize = window.setTimeout(() => {
       setWords(initialWords);
       if (savedActivity) setActivity(JSON.parse(savedActivity));
       if (savedGoals) setGoals(JSON.parse(savedGoals));
       if (savedDirection === "en-de" || savedDirection === "de-en" || savedDirection === "mixed") setDirection(savedDirection);
+      if (savedLearningCategory) setLearningCategory(savedLearningCategory);
       setReady(true);
     }, 0);
     return () => window.clearTimeout(initialize);
@@ -252,7 +255,8 @@ export default function Home() {
     window.localStorage.setItem("wortschatz-activity", JSON.stringify(activity));
     window.localStorage.setItem("wortschatz-goals", JSON.stringify(goals));
     window.localStorage.setItem("wortschatz-direction", direction);
-  }, [words, activity, goals, direction, ready]);
+    window.localStorage.setItem("wortschatz-learning-category", learningCategory);
+  }, [words, activity, goals, direction, learningCategory, ready]);
 
   const visibleWords = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -283,7 +287,10 @@ export default function Home() {
   const todayReviews = Math.max(0, todayActivity.reviewed - todayActivity.newReviewed);
   const dueWords = words.filter((word) => !word.isNew && word.dueAt <= clock);
   const problemWords = words.filter((word) => word.wrongCount >= 2);
-  const remainingNewWords = words.filter((word) => word.isNew).length;
+  const learningScopeWords = learningCategory === "all"
+    ? words
+    : words.filter((word) => word.category === learningCategory);
+  const remainingNewWords = learningScopeWords.filter((word) => word.isNew).length;
   const totalActivity = Object.values(activity).reduce((sum, day) => ({
     reviewed: sum.reviewed + day.reviewed,
     correct: sum.correct + day.correct,
@@ -313,27 +320,36 @@ export default function Home() {
     window.scrollTo({ top: 0, left: 0, behavior: "smooth" });
   }
 
-  function startLearning() {
+  function startLearning(selectedCategory = learningCategory) {
     const remainingNew = Math.max(0, goals.newCards - todayActivity.newReviewed);
+    const newBatchSize = remainingNew || goals.newCards;
     const remainingReviews = Math.max(0, goals.reviews - todayReviews);
-    const due = words
+    const scopedWords = selectedCategory === "all"
+      ? words
+      : words.filter((word) => word.category === selectedCategory);
+    const due = scopedWords
       .filter((word) => !word.isNew && word.dueAt <= Date.now())
       .sort((a, b) => a.dueAt - b.dueAt)
       .slice(0, remainingReviews);
-    const fresh = words
+    const fresh = scopedWords
       .filter((word) => word.isNew)
       .sort((a, b) => b.createdAt - a.createdAt)
-      .slice(0, remainingNew);
+      .slice(0, newBatchSize);
 
     openLearningSession([...due, ...fresh].map((word) => word.id));
   }
 
   function continueLearning() {
-    const fresh = words
+    const fresh = learningScopeWords
       .filter((word) => word.isNew)
       .sort((a, b) => b.createdAt - a.createdAt)
       .slice(0, EXTRA_BATCH_SIZE);
     openLearningSession(fresh.map((word) => word.id));
+  }
+
+  function changeLearningCategory(value: string) {
+    setLearningCategory(value);
+    startLearning(value);
   }
 
   function openLearningSession(wordIds: string[]) {
@@ -534,7 +550,7 @@ export default function Home() {
         </button>
         <nav aria-label="Hauptnavigation">
           <button className={view === "collection" ? "active" : ""} onClick={() => setView("collection")}>Sammlung</button>
-          <button className={view === "learn" ? "active" : ""} onClick={startLearning}>Lernen</button>
+          <button className={view === "learn" ? "active" : ""} onClick={() => startLearning()}>Lernen</button>
         </nav>
         <div className="header-actions">
           <button className="file-action" onClick={() => importInput.current?.click()} title="Sammlung aus einer Datei laden"><span>↑</span><b>Import</b></button>
@@ -564,7 +580,10 @@ export default function Home() {
           <section className="learning-dashboard" aria-label="Heutiger Lernfortschritt">
             <div className="dashboard-heading">
               <div><p className="eyebrow">Heute lernen</p><h2>Dein Tagesplan</h2></div>
-              <button className="primary" onClick={startLearning}>Jetzt lernen <span>→</span></button>
+              <div className="learning-setup">
+                <label><span>Lernbereich</span><select value={learningCategory} onChange={(event) => setLearningCategory(event.target.value)}><option value="all">Alle Kategorien</option>{categories.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+                <button className="primary" onClick={() => startLearning()}>Jetzt lernen <span>→</span></button>
+              </div>
             </div>
             <div className="goal-grid">
               <div className="goal-card">
@@ -660,12 +679,15 @@ export default function Home() {
         <section className="learn-view">
           <p className="eyebrow">Lernmodus</p>
           <h1>Eine Karte nach der anderen.</h1>
-          <div className="direction-picker" aria-label="Lernrichtung wählen">
-            {(["de-en", "en-de", "mixed"] as const).map((item) => (
-              <button key={item} className={direction === item ? "active" : ""} onClick={() => setDirection(item)}>
-                {item === "de-en" ? "Deutsch → Englisch" : item === "en-de" ? "Englisch → Deutsch" : "Gemischt"}
-              </button>
-            ))}
+          <div className="learn-options">
+            <label className="learn-category"><span>Lernbereich</span><select value={learningCategory} onChange={(event) => changeLearningCategory(event.target.value)}><option value="all">Alle Kategorien</option>{categories.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+            <div className="direction-picker" aria-label="Lernrichtung wählen">
+              {(["de-en", "en-de", "mixed"] as const).map((item) => (
+                <button key={item} className={direction === item ? "active" : ""} onClick={() => setDirection(item)}>
+                  {item === "de-en" ? "Deutsch → Englisch" : item === "en-de" ? "Englisch → Deutsch" : "Gemischt"}
+                </button>
+              ))}
+            </div>
           </div>
           {currentLearnWord ? (
             <>
