@@ -27,6 +27,7 @@ type WordCard = {
 };
 
 const DAY = 24 * 60 * 60 * 1000;
+const EXTRA_BATCH_SIZE = 10;
 
 function localDateKey(date = new Date()) {
   const year = date.getFullYear();
@@ -271,6 +272,7 @@ export default function Home() {
   const todayReviews = Math.max(0, todayActivity.reviewed - todayActivity.newReviewed);
   const dueWords = words.filter((word) => !word.isNew && word.dueAt <= clock);
   const problemWords = words.filter((word) => word.wrongCount >= 2);
+  const remainingNewWords = words.filter((word) => word.isNew).length;
   const totalActivity = Object.values(activity).reduce((sum, day) => ({
     reviewed: sum.reviewed + day.reviewed,
     correct: sum.correct + day.correct,
@@ -312,7 +314,19 @@ export default function Home() {
       .sort((a, b) => b.createdAt - a.createdAt)
       .slice(0, remainingNew);
 
-    setSessionWordIds([...due, ...fresh].map((word) => word.id));
+    openLearningSession([...due, ...fresh].map((word) => word.id));
+  }
+
+  function continueLearning() {
+    const fresh = words
+      .filter((word) => word.isNew)
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, EXTRA_BATCH_SIZE);
+    openLearningSession(fresh.map((word) => word.id));
+  }
+
+  function openLearningSession(wordIds: string[]) {
+    setSessionWordIds(wordIds);
     setLearnIndex(0);
     setRevealed(false);
     setView("learn");
@@ -638,7 +652,16 @@ export default function Home() {
                 <button className="known" onClick={() => reviewLearnCard("known")}><strong>Gewusst</strong><small>in {currentLearnWord.intervalDays > 0 ? Math.max(3, Math.round(currentLearnWord.intervalDays * 2.2)) : 3} Tagen</small></button>
               </div>}
             </>
-          ) : <div className="empty-state"><strong>Tagesrunde geschafft!</strong><p>Deine heutigen neuen Karten und fälligen Wiederholungen sind erledigt.</p><button className="primary" onClick={goToStart}>Zur Übersicht</button></div>}
+          ) : (
+            <div className="empty-state">
+              <strong>Runde geschafft!</strong>
+              <p>{remainingNewWords > 0 ? `Du kannst direkt mit den nächsten ${Math.min(EXTRA_BATCH_SIZE, remainingNewWords)} Wörtern weitermachen.` : "Du hast alle neuen Wörter bearbeitet."}</p>
+              <div className="empty-actions">
+                {remainingNewWords > 0 && <button className="primary" onClick={continueLearning}>Weitere {Math.min(EXTRA_BATCH_SIZE, remainingNewWords)} Wörter lernen</button>}
+                <button className="secondary" onClick={goToStart}>Zur Übersicht</button>
+              </div>
+            </div>
+          )}
         </section>
       )}
 
