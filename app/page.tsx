@@ -6,6 +6,7 @@ import { coreExampleTranslations } from "./core-example-translations";
 import { coreWords } from "./core-words";
 import { coreExamples } from "./core-examples";
 import { dailyWords } from "./daily-words";
+import { languageIslandLines } from "./language-islands";
 
 type WordStatus = "new" | "learning" | "learned";
 type LearningDirection = "en-de" | "de-en" | "mixed";
@@ -18,6 +19,7 @@ type WordCard = {
   example: string;
   exampleGerman?: string;
   category: string;
+  topic?: string;
   status: WordStatus;
   isNew: boolean;
   favorite: boolean;
@@ -154,6 +156,30 @@ const dailyWordCards: WordCard[] = dailyWords.map(([
   wrongCount: 0,
 }));
 
+const languageIslandCards: WordCard[] = languageIslandLines.map(([
+  topic,
+  english,
+  german,
+  example,
+  exampleGerman,
+], index) => ({
+  id: `language-island-restaurant-${index + 1}`,
+  english,
+  german,
+  example,
+  exampleGerman,
+  category: "Sprachinseln",
+  topic,
+  status: "new",
+  isNew: true,
+  favorite: false,
+  createdAt: languageIslandLines.length - index,
+  dueAt: 0,
+  intervalDays: 0,
+  reviewCount: 0,
+  wrongCount: 0,
+}));
+
 const statusLabels: Record<WordStatus, string> = {
   new: "Wiederholen",
   learning: "Schwierig",
@@ -167,6 +193,7 @@ export default function Home() {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | WordStatus | "favorite" | "marked-new" | "problem">("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
+  const [topicFilter, setTopicFilter] = useState("all");
   const [formOpen, setFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [english, setEnglish] = useState("");
@@ -178,6 +205,7 @@ export default function Home() {
   const [revealed, setRevealed] = useState(false);
   const [direction, setDirection] = useState<LearningDirection>("mixed");
   const [learningCategory, setLearningCategory] = useState("all");
+  const [learningTopic, setLearningTopic] = useState("all");
   const [goals, setGoals] = useState({ newCards: 10, reviews: 30 });
   const [activity, setActivity] = useState<DailyActivity>({});
   const [clock, setClock] = useState(() => Date.now());
@@ -221,6 +249,14 @@ export default function Home() {
       window.localStorage.setItem("wortschatz-library-1103-v1", "done");
     }
 
+    if (!window.localStorage.getItem("wortschatz-language-islands-restaurant-v1")) {
+      const existingIds = new Set(initialWords.map((word) => word.id));
+      languageIslandCards.forEach((word) => {
+        if (!existingIds.has(word.id)) initialWords.push(word);
+      });
+      window.localStorage.setItem("wortschatz-language-islands-restaurant-v1", "done");
+    }
+
     if (!window.localStorage.getItem("wortschatz-core-examples-v1")) {
       const examplesById = new Map(coreWordCards.map((word) => [word.id, word.example]));
       initialWords.forEach((word) => {
@@ -245,6 +281,7 @@ export default function Home() {
     const savedGoals = window.localStorage.getItem("wortschatz-goals");
     const savedDirection = window.localStorage.getItem("wortschatz-direction");
     const savedLearningCategory = window.localStorage.getItem("wortschatz-learning-category");
+    const savedLearningTopic = window.localStorage.getItem("wortschatz-learning-topic");
     window.localStorage.setItem("wortschatz-core-500-v1", "done");
     const initialize = window.setTimeout(() => {
       setWords(initialWords);
@@ -252,6 +289,7 @@ export default function Home() {
       if (savedGoals) setGoals(JSON.parse(savedGoals));
       if (savedDirection === "en-de" || savedDirection === "de-en" || savedDirection === "mixed") setDirection(savedDirection);
       if (savedLearningCategory) setLearningCategory(savedLearningCategory);
+      if (savedLearningTopic) setLearningTopic(savedLearningTopic);
       setReady(true);
     }, 0);
     return () => window.clearTimeout(initialize);
@@ -269,21 +307,23 @@ export default function Home() {
     window.localStorage.setItem("wortschatz-goals", JSON.stringify(goals));
     window.localStorage.setItem("wortschatz-direction", direction);
     window.localStorage.setItem("wortschatz-learning-category", learningCategory);
-  }, [words, activity, goals, direction, learningCategory, ready]);
+    window.localStorage.setItem("wortschatz-learning-topic", learningTopic);
+  }, [words, activity, goals, direction, learningCategory, learningTopic, ready]);
 
   const visibleWords = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return words.filter((word) => {
-      const matchesText = !needle || [word.english, word.german, word.example, word.category]
+      const matchesText = !needle || [word.english, word.german, word.example, word.exampleGerman ?? "", word.category, word.topic ?? ""]
         .some((value) => value.toLowerCase().includes(needle));
       const matchesFilter = filter === "all" ||
         (filter === "favorite" ? word.favorite :
           filter === "marked-new" ? word.isNew :
             filter === "problem" ? word.wrongCount >= 2 : word.status === filter);
       const matchesCategory = categoryFilter === "all" || word.category === categoryFilter;
-      return matchesText && matchesFilter && matchesCategory;
+      const matchesTopic = categoryFilter !== "Sprachinseln" || topicFilter === "all" || word.topic === topicFilter;
+      return matchesText && matchesFilter && matchesCategory && matchesTopic;
     });
-  }, [words, query, filter, categoryFilter]);
+  }, [words, query, filter, categoryFilter, topicFilter]);
 
   const categories = useMemo(
     () => [...new Set(words.map((word) => word.category).filter(Boolean))]
@@ -291,8 +331,12 @@ export default function Home() {
     [words],
   );
   const formCategories = useMemo(
-    () => [...new Set(["Grundwortschatz", "Alltag", "Arbeit", "Reisen", "Gefühle", "Sonstiges", ...categories])],
+    () => [...new Set(["Grundwortschatz", "Sprachinseln", "Alltag", "Arbeit", "Reisen", "Gefühle", "Sonstiges", ...categories])],
     [categories],
+  );
+  const languageIslandTopics = useMemo(
+    () => [...new Set(words.filter((word) => word.category === "Sprachinseln").map((word) => word.topic).filter((topic): topic is string => Boolean(topic)))].sort((a, b) => a.localeCompare(b, "de")),
+    [words],
   );
 
   const todayKey = localDateKey(new Date(clock));
@@ -300,9 +344,10 @@ export default function Home() {
   const todayReviews = Math.max(0, todayActivity.reviewed - todayActivity.newReviewed);
   const dueWords = words.filter((word) => !word.isNew && word.dueAt <= clock);
   const problemWords = words.filter((word) => word.wrongCount >= 2);
-  const learningScopeWords = learningCategory === "all"
-    ? words
-    : words.filter((word) => word.category === learningCategory);
+  const learningScopeWords = words.filter((word) =>
+    (learningCategory === "all" || word.category === learningCategory) &&
+    (learningCategory !== "Sprachinseln" || learningTopic === "all" || word.topic === learningTopic)
+  );
   const remainingNewWords = learningScopeWords.filter((word) => word.isNew).length;
   const totalActivity = Object.values(activity).reduce((sum, day) => ({
     reviewed: sum.reviewed + day.reviewed,
@@ -333,13 +378,14 @@ export default function Home() {
     window.scrollTo({ top: 0, left: 0, behavior: "smooth" });
   }
 
-  function startLearning(selectedCategory = learningCategory) {
+  function startLearning(selectedCategory = learningCategory, selectedTopic = learningTopic) {
     const remainingNew = Math.max(0, goals.newCards - todayActivity.newReviewed);
     const newBatchSize = remainingNew || goals.newCards;
     const remainingReviews = Math.max(0, goals.reviews - todayReviews);
-    const scopedWords = selectedCategory === "all"
-      ? words
-      : words.filter((word) => word.category === selectedCategory);
+    const scopedWords = words.filter((word) =>
+      (selectedCategory === "all" || word.category === selectedCategory) &&
+      (selectedCategory !== "Sprachinseln" || selectedTopic === "all" || word.topic === selectedTopic)
+    );
     const due = scopedWords
       .filter((word) => !word.isNew && word.dueAt <= Date.now())
       .sort((a, b) => a.dueAt - b.dueAt)
@@ -361,8 +407,15 @@ export default function Home() {
   }
 
   function changeLearningCategory(value: string) {
+    const nextTopic = value === "Sprachinseln" ? languageIslandTopics[0] ?? "all" : "all";
     setLearningCategory(value);
-    startLearning(value);
+    setLearningTopic(nextTopic);
+    startLearning(value, nextTopic);
+  }
+
+  function changeLearningTopic(value: string) {
+    setLearningTopic(value);
+    startLearning("Sprachinseln", value);
   }
 
   function openLearningSession(wordIds: string[]) {
@@ -531,6 +584,7 @@ export default function Home() {
           example: typeof word.example === "string" ? word.example : "",
           exampleGerman: typeof word.exampleGerman === "string" ? word.exampleGerman : "",
           category: typeof word.category === "string" ? word.category : "Sonstiges",
+          topic: typeof word.topic === "string" ? word.topic : undefined,
           status: word.status === "learning" || word.status === "learned" ? word.status : "new",
           isNew: word.isNew !== false,
           favorite: word.favorite === true,
@@ -595,7 +649,8 @@ export default function Home() {
             <div className="dashboard-heading">
               <div><p className="eyebrow">Heute lernen</p><h2>Dein Tagesplan</h2></div>
               <div className="learning-setup">
-                <label><span>Lernbereich</span><select value={learningCategory} onChange={(event) => setLearningCategory(event.target.value)}><option value="all">Alle Kategorien</option>{categories.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+                <label><span>Lernbereich</span><select value={learningCategory} onChange={(event) => { setLearningCategory(event.target.value); setLearningTopic(event.target.value === "Sprachinseln" ? languageIslandTopics[0] ?? "all" : "all"); }}><option value="all">Alle Kategorien</option>{categories.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+                {learningCategory === "Sprachinseln" && <label><span>Thema</span><select value={learningTopic} onChange={(event) => setLearningTopic(event.target.value)}><option value="all">Alle Themen</option>{languageIslandTopics.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>}
                 <button className="primary" onClick={() => startLearning()}>Jetzt lernen <span>→</span></button>
               </div>
             </div>
@@ -624,11 +679,12 @@ export default function Home() {
             </label>
             <label className="category-filter">
               <span>Kategorie</span>
-              <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
+              <select value={categoryFilter} onChange={(event) => { setCategoryFilter(event.target.value); setTopicFilter("all"); }}>
                 <option value="all">Alle Kategorien</option>
                 {categories.map((item) => <option key={item} value={item}>{item}</option>)}
               </select>
             </label>
+            {categoryFilter === "Sprachinseln" && <label className="category-filter"><span>Thema</span><select value={topicFilter} onChange={(event) => setTopicFilter(event.target.value)}><option value="all">Alle Themen</option>{languageIslandTopics.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>}
             <div className="filters" aria-label="Karten filtern">
               {(["all", "marked-new", "problem", "new", "learning", "learned", "favorite"] as const).map((item) => (
                 <button key={item} className={filter === item ? "active" : ""} onClick={() => setFilter(item)}>
@@ -678,7 +734,7 @@ export default function Home() {
                   <button className={word.status === "learned" ? "selected known" : "known"} aria-pressed={word.status === "learned"} onClick={() => setWordStatus(word.id, "learned")}><span>✓</span>Bekannt</button>
                 </div>
                 <div className="card-footer">
-                  <span className="category">{word.category}</span>
+                  <div className="card-taxonomy"><span className="category">{word.category}</span>{word.topic && <span className="topic">{word.topic}</span>}</div>
                   <div className="card-actions">
                     <button onClick={() => openEditForm(word)} aria-label={`${word.english} bearbeiten`}>✎</button>
                     <button onClick={() => setWords((current) => current.filter((item) => item.id !== word.id))} aria-label={`${word.english} löschen`}>×</button>
@@ -695,6 +751,7 @@ export default function Home() {
           <h1>Eine Karte nach der anderen.</h1>
           <div className="learn-options">
             <label className="learn-category"><span>Lernbereich</span><select value={learningCategory} onChange={(event) => changeLearningCategory(event.target.value)}><option value="all">Alle Kategorien</option>{categories.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+            {learningCategory === "Sprachinseln" && <label className="learn-category"><span>Thema</span><select value={learningTopic} onChange={(event) => changeLearningTopic(event.target.value)}><option value="all">Alle Themen</option>{languageIslandTopics.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>}
             <div className="direction-picker" aria-label="Lernrichtung wählen">
               {(["de-en", "en-de", "mixed"] as const).map((item) => (
                 <button key={item} className={direction === item ? "active" : ""} onClick={() => setDirection(item)}>
