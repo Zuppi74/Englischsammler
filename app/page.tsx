@@ -6,6 +6,7 @@ import { coreExampleTranslations } from "./core-example-translations";
 import { coreWords } from "./core-words";
 import { coreExamples } from "./core-examples";
 import { dailyWords } from "./daily-words";
+import { businessExampleTranslations, dailyExampleTranslations } from "./example-translations";
 import { languageIslandLines } from "./language-islands";
 
 type WordStatus = "new" | "learning" | "learned";
@@ -122,6 +123,7 @@ const businessWordCards: WordCard[] = businessWords.map(([category, english, ger
   english,
   german,
   example,
+  exampleGerman: businessExampleTranslations[index] ?? "",
   category,
   status: "new",
   isNew: true,
@@ -145,6 +147,7 @@ const dailyWordCards: WordCard[] = dailyWords.map(([
   english,
   german,
   example,
+  exampleGerman: dailyExampleTranslations[index] ?? "",
   category,
   status,
   isNew: true,
@@ -275,6 +278,18 @@ export default function Home() {
         }
       });
       window.localStorage.setItem("wortschatz-core-example-translations-v1", "done");
+    }
+
+    if (!window.localStorage.getItem("wortschatz-other-example-translations-v1")) {
+      const translationsById = new Map(
+        [...businessWordCards, ...dailyWordCards].map((word) => [word.id, word.exampleGerman])
+      );
+      initialWords.forEach((word) => {
+        if (!word.exampleGerman?.trim()) {
+          word.exampleGerman = translationsById.get(word.id) ?? "";
+        }
+      });
+      window.localStorage.setItem("wortschatz-other-example-translations-v1", "done");
     }
 
     const savedActivity = window.localStorage.getItem("wortschatz-activity");
