@@ -201,7 +201,7 @@ export default function Home() {
   const [ready, setReady] = useState(false);
   const [view, setView] = useState<"collection" | "learn">("collection");
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<"all" | WordStatus | "favorite" | "marked-new" | "problem">("all");
+  const [filter, setFilter] = useState<"all" | WordStatus | "favorite">("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [topicFilter, setTopicFilter] = useState("all");
   const [formOpen, setFormOpen] = useState(false);
@@ -342,9 +342,7 @@ export default function Home() {
       const matchesText = !needle || [word.english, word.german, word.example, word.exampleGerman ?? "", word.category, word.topic ?? ""]
         .some((value) => value.toLowerCase().includes(needle));
       const matchesFilter = filter === "all" ||
-        (filter === "favorite" ? word.favorite :
-          filter === "marked-new" ? word.isNew :
-            filter === "problem" ? word.wrongCount >= 2 : word.status === filter);
+        (filter === "favorite" ? word.favorite : word.status === filter);
       const matchesCategory = categoryFilter === "all" || word.category === categoryFilter;
       const matchesTopic = categoryFilter !== "Sprachinseln" || topicFilter === "all" || word.topic === topicFilter;
       return matchesText && matchesFilter && matchesCategory && matchesTopic;
@@ -780,9 +778,9 @@ export default function Home() {
             </label>
             {categoryFilter === "Sprachinseln" && <label className="category-filter"><span>Thema</span><select value={topicFilter} onChange={(event) => setTopicFilter(event.target.value)}><option value="all">Alle Themen</option>{languageIslandTopics.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>}
             <div className="filters" aria-label="Karten filtern">
-              {(["all", "marked-new", "problem", "new", "learning", "learned", "favorite"] as const).map((item) => (
+              {(["all", "new", "learning", "learned", "favorite"] as const).map((item) => (
                 <button key={item} className={filter === item ? "active" : ""} onClick={() => setFilter(item)}>
-                  {item === "all" ? "Alle" : item === "marked-new" ? "Neu" : item === "problem" ? "Problemwörter" : item === "favorite" ? "Favoriten" : statusLabels[item]}
+                  {item === "all" ? "Alle" : item === "favorite" ? "Favoriten" : statusLabels[item]}
                 </button>
               ))}
             </div>
