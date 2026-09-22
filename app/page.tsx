@@ -368,12 +368,12 @@ export default function Home() {
   const todayKey = localDateKey(new Date(clock));
   const todayActivity = activity[todayKey] ?? { reviewed: 0, correct: 0, newReviewed: 0 };
   const todayReviews = Math.max(0, todayActivity.reviewed - todayActivity.newReviewed);
-  const dueWords = words.filter((word) => !word.isNew && word.dueAt <= clock);
-  const problemWords = words.filter((word) => word.wrongCount >= 2);
   const learningScopeWords = words.filter((word) =>
     (learningCategory === "all" || word.category === learningCategory) &&
     (learningCategory !== "Sprachinseln" || learningTopic === "all" || word.topic === learningTopic)
   );
+  const dueWords = learningScopeWords.filter((word) => !word.isNew && word.dueAt <= clock);
+  const problemWords = learningScopeWords.filter((word) => word.wrongCount >= 2);
   const remainingNewWords = learningScopeWords.filter((word) => word.isNew).length;
   const totalActivity = Object.values(activity).reduce((sum, day) => ({
     reviewed: sum.reviewed + day.reviewed,
@@ -422,6 +422,28 @@ export default function Home() {
       .slice(0, newBatchSize);
 
     openLearningSession([...due, ...fresh].map((word) => word.id));
+  }
+
+  function startReviewLearning() {
+    const reviewIds = dueWords
+      .toSorted((left, right) => left.dueAt - right.dueAt)
+      .map((word) => word.id);
+    if (!reviewIds.length) {
+      showNotice("Heute sind keine Wiederholungen fällig.");
+      return;
+    }
+    openLearningSession(reviewIds);
+  }
+
+  function startProblemLearning() {
+    const problemIds = problemWords
+      .toSorted((left, right) => right.wrongCount - left.wrongCount)
+      .map((word) => word.id);
+    if (!problemIds.length) {
+      showNotice("In diesem Lernbereich gibt es keine Problemwörter.");
+      return;
+    }
+    openLearningSession(problemIds);
   }
 
   function continueLearning() {
@@ -719,15 +741,28 @@ export default function Home() {
                 <div className="progress-track"><span style={{ width: `${Math.min(100, todayActivity.newReviewed / Math.max(1, goals.newCards) * 100)}%` }} /></div>
                 <label>Tagesziel <input type="number" min="1" max="100" value={goals.newCards} onChange={(event) => setGoals((current) => ({ ...current, newCards: Math.max(1, Number(event.target.value) || 1) }))} /></label>
               </div>
-              <div className="goal-card">
+              <div
+                className="goal-card goal-link"
+                role="button"
+                tabIndex={0}
+                aria-label={`${dueWords.length} fällige Wiederholungen lernen`}
+                onClick={startReviewLearning}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    startReviewLearning();
+                  }
+                }}
+              >
                 <div><span>Wiederholungen</span><strong>{Math.min(todayReviews, goals.reviews)} / {goals.reviews}</strong></div>
                 <div className="progress-track"><span style={{ width: `${Math.min(100, todayReviews / Math.max(1, goals.reviews) * 100)}%` }} /></div>
-                <label>Tagesziel <input type="number" min="1" max="200" value={goals.reviews} onChange={(event) => setGoals((current) => ({ ...current, reviews: Math.max(1, Number(event.target.value) || 1) }))} /></label>
+                <small>{dueWords.length} heute fällig · Klicken zum Lernen</small>
+                <label onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>Tagesziel <input type="number" min="1" max="200" value={goals.reviews} onChange={(event) => setGoals((current) => ({ ...current, reviews: Math.max(1, Number(event.target.value) || 1) }))} /></label>
               </div>
               <div className="metric-card"><span>Heute fällig</span><strong>{dueWords.length}</strong><small>automatisch geplant</small></div>
               <div className="metric-card"><span>Trefferquote</span><strong>{accuracy}%</strong><small>{totalActivity.reviewed} Antworten</small></div>
               <div className="metric-card"><span>Lernserie</span><strong>{streak}</strong><small>{streak === 1 ? "Tag" : "Tage"} in Folge</small></div>
-              <button className="metric-card problem-link" onClick={() => setFilter("problem")}><span>Problemwörter</span><strong>{problemWords.length}</strong><small>zweimal oder öfter schwierig</small></button>
+              <button className="metric-card problem-link" onClick={startProblemLearning}><span>Problemwörter</span><strong>{problemWords.length}</strong><small>Zweimal oder öfter schwierig · Klicken zum Lernen</small></button>
             </div>
           </section>
 
