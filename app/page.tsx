@@ -159,29 +159,36 @@ const dailyWordCards: WordCard[] = dailyWords.map(([
   wrongCount: 0,
 }));
 
+const languageIslandTopicCounts = new Map<string, number>();
 const languageIslandCards: WordCard[] = languageIslandLines.map(([
   topic,
   english,
   german,
   example,
   exampleGerman,
-], index) => ({
-  id: `language-island-restaurant-${index + 1}`,
-  english,
-  german,
-  example,
-  exampleGerman,
-  category: "Sprachinseln",
-  topic,
-  status: "new",
-  isNew: true,
-  favorite: false,
-  createdAt: languageIslandLines.length - index,
-  dueAt: 0,
-  intervalDays: 0,
-  reviewCount: 0,
-  wrongCount: 0,
-}));
+], index) => {
+  const topicNumber = (languageIslandTopicCounts.get(topic) ?? 0) + 1;
+  languageIslandTopicCounts.set(topic, topicNumber);
+  const topicId = topic === "Restaurantbesuch" ? "restaurant" : topic.toLocaleLowerCase("de");
+
+  return {
+    id: `language-island-${topicId}-${topicNumber}`,
+    english,
+    german,
+    example,
+    exampleGerman,
+    category: "Sprachinseln",
+    topic,
+    status: "new",
+    isNew: true,
+    favorite: false,
+    createdAt: languageIslandLines.length - index,
+    dueAt: 0,
+    intervalDays: 0,
+    reviewCount: 0,
+    wrongCount: 0,
+  };
+});
 
 const statusLabels: Record<WordStatus, string> = {
   new: "Wiederholen",
@@ -252,13 +259,17 @@ export default function Home() {
       window.localStorage.setItem("wortschatz-library-1103-v1", "done");
     }
 
-    if (!window.localStorage.getItem("wortschatz-language-islands-restaurant-v1")) {
+    const addLanguageIslandTopic = (topic: string, storageKey: string) => {
+      if (window.localStorage.getItem(storageKey)) return;
       const existingIds = new Set(initialWords.map((word) => word.id));
-      languageIslandCards.forEach((word) => {
+      languageIslandCards.filter((word) => word.topic === topic).forEach((word) => {
         if (!existingIds.has(word.id)) initialWords.push(word);
       });
-      window.localStorage.setItem("wortschatz-language-islands-restaurant-v1", "done");
-    }
+      window.localStorage.setItem(storageKey, "done");
+    };
+
+    addLanguageIslandTopic("Restaurantbesuch", "wortschatz-language-islands-restaurant-v1");
+    addLanguageIslandTopic("Hotel", "wortschatz-language-islands-hotel-v1");
 
     if (!window.localStorage.getItem("wortschatz-core-examples-v1")) {
       const examplesById = new Map(coreWordCards.map((word) => [word.id, word.example]));
