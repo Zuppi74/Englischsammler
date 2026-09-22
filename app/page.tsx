@@ -804,16 +804,6 @@ export default function Home() {
                 }}
               >
                 <div className="card-top">
-                  <div className="card-badges">
-                    <span className={`status ${word.status}`}>{statusLabels[word.status]}</span>
-                    <button
-                      className={`new-marker ${word.isNew ? "selected" : ""}`}
-                      aria-pressed={word.isNew}
-                      aria-label={`${word.english} als neu markieren`}
-                      onClick={() => setWords((current) => current.map((item) => item.id === word.id ? { ...item, isNew: !item.isNew } : item))}
-                    >Neu</button>
-                    {word.wrongCount >= 2 && <span className="problem-marker">Problemwort</span>}
-                  </div>
                   <div className="card-quick-actions">
                     <button className="speak-button" onClick={() => speakEnglish(word.english)} aria-label={`${word.english} vorlesen`} title="Englisch vorlesen">🔊</button>
                     <button className={`favorite ${word.favorite ? "selected" : ""}`} onClick={() => setWords((current) => current.map((item) => item.id === word.id ? { ...item, favorite: !item.favorite } : item))} aria-label="Favorit umschalten">{word.favorite ? "★" : "☆"}</button>
