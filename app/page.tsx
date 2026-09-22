@@ -373,7 +373,7 @@ export default function Home() {
     (learningCategory !== "Sprachinseln" || learningTopic === "all" || word.topic === learningTopic)
   );
   const dueWords = learningScopeWords.filter((word) => !word.isNew && word.dueAt <= clock);
-  const problemWords = learningScopeWords.filter((word) => word.wrongCount >= 2);
+  const difficultWords = learningScopeWords.filter((word) => word.status === "learning");
   const remainingNewWords = learningScopeWords.filter((word) => word.isNew).length;
   const totalActivity = Object.values(activity).reduce((sum, day) => ({
     reviewed: sum.reviewed + day.reviewed,
@@ -435,15 +435,15 @@ export default function Home() {
     openLearningSession(reviewIds);
   }
 
-  function startProblemLearning() {
-    const problemIds = problemWords
-      .toSorted((left, right) => right.wrongCount - left.wrongCount)
+  function startDifficultLearning() {
+    const difficultIds = difficultWords
+      .toSorted((left, right) => (right.lastReviewedAt ?? 0) - (left.lastReviewedAt ?? 0))
       .map((word) => word.id);
-    if (!problemIds.length) {
-      showNotice("In diesem Lernbereich gibt es keine Problemwörter.");
+    if (!difficultIds.length) {
+      showNotice("In diesem Lernbereich gibt es keine schwierigen Karten.");
       return;
     }
-    openLearningSession(problemIds);
+    openLearningSession(difficultIds);
   }
 
   function continueLearning() {
@@ -762,7 +762,7 @@ export default function Home() {
               <div className="metric-card"><span>Heute fällig</span><strong>{dueWords.length}</strong><small>automatisch geplant</small></div>
               <div className="metric-card"><span>Trefferquote</span><strong>{accuracy}%</strong><small>{totalActivity.reviewed} Antworten</small></div>
               <div className="metric-card"><span>Lernserie</span><strong>{streak}</strong><small>{streak === 1 ? "Tag" : "Tage"} in Folge</small></div>
-              <button className="metric-card problem-link" onClick={startProblemLearning}><span>Problemwörter</span><strong>{problemWords.length}</strong><small>Zweimal oder öfter schwierig · Klicken zum Lernen</small></button>
+              <button className="metric-card difficult-link" onClick={startDifficultLearning}><span>Schwierig</span><strong>{difficultWords.length}</strong><small>Als schwierig eingestuft · Klicken zum Lernen</small></button>
             </div>
           </section>
 
